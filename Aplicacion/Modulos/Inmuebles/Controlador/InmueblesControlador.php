@@ -178,11 +178,7 @@ class InmueblesControlador extends ControladorBase
         parent::__construct();
         $this->_vista->addScriptPath(DIRMODULOS . 'Inmuebles/Vista');
         require_once DIRMODULOS . 'Inmuebles/Modelo/InmueblesModelo.php';
-        require_once DIRMODULOS . 'Salones/Modelo/SalonesModelo.php';
-        require_once DIRMODULOS . 'CalendarioEscolar/Modelo/CalendarioEscolarModelo.php';
         $this->_modelo = new InmueblesModelo();
-        $this->_modeloSalones = new SalonesModelo();
-        $this->_modeloALectivo = new CalendarioEscolarModelo();
     }
 
     /**
@@ -192,63 +188,6 @@ class InmueblesControlador extends ControladorBase
     {
         $this->_layout->content = $this->_vista->render('InmueblesVista.php');
         $this->_layout->setLayout('layout');
-        echo $this->_layout->render();
-    }
-
-    /**
-     * Método para inscribir un inmueble en un salón
-     * El salón y el inmueble deben existir
-     */
-    public function inscribir()
-    {
-        require_once DIRMODULOS . 'Inmuebles/Forms/InscribirInmuebles.php';
-        require_once LIBRERIAS . 'BarraHerramientas.php';
-        /* esto es para que la lista de inmuebles no tenga limite */
-        $this->_modelo->setLimite(0);
-        /* traigo la lista de inscriptos */
-//        $listaInscriptos = $this->_modelo->listaInscriptos();
-        $ciclo = date('Y');
-        /* traigo la lista de inmuebles aptos para inscripcion */
-        $listaInmuebles = $this->_modelo->inmueblesParaInscripcion($ciclo);
-        /* traigo los siguientes campos de la lista de salones */
-        $campos = array('salones.id, salones.salon');
-        /* traigo la lista sin limites */
-        $this->_modeloSalones->setLimite(0);
-        /* obtengo los datos de la bd */
-        $listaSalones = $this->_modeloSalones->listadoSalones(0, 'salon', '', $campos);
-        /* obtengo los datos de los ciclos lectivos */
-        $listaCiclosLectivos = $this->_modeloALectivo->listadoCalendarios(0, 'aLectivo', '');
-        foreach ($listaCiclosLectivos as $cicloLectivo) {
-            $cicloLectivoArray[] = Array($cicloLectivo['aLectivo'] => $cicloLectivo['aLectivo']);
-        }
-
-        /* creo el formulario */
-        $this->_form = new Form_InscribirInmuebles($listaInmuebles, $listaSalones, $cicloLectivoArray);
-        /* pongo el formulario en la vista */
-        $this->_vista->form = $this->_form->mostrar();
-        if ($_POST) {
-            if ($this->_form->isValid($_POST)) {
-                $values = $this->_form->getValidValues($_POST);
-                $inmuebles[] = $values['inmuebles'];
-                $salon = $values['salones'];
-                $aLectivo = $values['aLectivo'];
-                foreach ($inmuebles[0] as $inmueble) {
-                    $values = array('idAlumno' => $inmueble, 'idSalon' => $salon, 'aLectivo' => $aLectivo);
-                    $this->_modelo->inscribir($values);
-                }
-                parent::_redirect('index.php?option=inmuebles&sub=listarInscriptos');
-                $this->_vista->mensajes = Mensajes::presentarMensaje(DATOSGUARDADOS, 'info');
-            }
-        }
-        $bh = new BarraHerramientas($this->_vista);
-        $bh->addBoton('Guardar', $this->_paramBotonGuardarAlumno);
-        $bh->addBoton('Nuevo', $this->_paramBotonNuevaInscripcion);
-        $bh->addBoton('Lista', $this->_paramBotonListaInscriptos);
-        $bh->addBoton('Volver', $this->_paramBotonVolver);
-
-        $this->_vista->barraherramientas = $bh->render();
-        $this->_layout->content = $this->_vista->render('AgregarInmueblesVista.php');
-        // render final layout
         echo $this->_layout->render();
     }
 
@@ -369,21 +308,6 @@ class InmueblesControlador extends ControladorBase
         echo $this->_layout->render();
     }
 
-    /**
-     * Metodo para eliminar una inscripcion.
-     * La eliminacion no es real, sino que establece el campo 'eliminado' en verdadero
-     * para no mostrarlo en las proximas oportunidades
-     * @param Array $arg 
-     * @access public
-     */
-    public function eliminarInscripcion($arg = '')
-    {
-        $where = implode(',', $arg);
-        $values['eliminado'] = '1';
-        $this->_modelo->actualizar('conta_inscripciones', $values, $arg);
-        $this->_vista->mensajes = Mensajes::presentarMensaje(DATOSELIMINADOS, 'info');
-        parent::_redirect(LIVESITE . '/index.php?option=inmuebles&sub=listarInscriptos');
-    }
 
     /**
      * Metodo para eliminar un inmueble.
@@ -392,7 +316,7 @@ class InmueblesControlador extends ControladorBase
      * @param Array $arg 
      * @access public
      */
-    public function eliminarAlumno($arg = '')
+    public function eliminarInmueble($arg = '')
     {
         $where = implode(',', $arg);
         $values['eliminado'] = '1';
@@ -585,50 +509,6 @@ class InmueblesControlador extends ControladorBase
         echo $json->encode($responce);
     }
 
-    /**
-     * Metodo para traer la lista de los inmuebles inscriptos.
-     * @param string $arg. El ciclo lectivo
-     * @access public
-     */
-    public function ajaxInmueblesParaInscribir($arg = '')
-    {
-        if ($arg == '') {
-            $ciclo = date('Y');
-        } else {
-            $ciclo = $arg[0];
-        }
-        print_r($arg);
-        $salon = 0;
-        $fuenteDatos = $this->_modelo->inmueblesParaInscripcion($ciclo);
-        /** Lista de inmuebles * */
-        $retorno = '';
-        $i = 0;
-        foreach ($fuenteDatos as $inmueble) {
-//            $opcionListaInmuebles[]=array($inmueble->id => $inmueble->apellidos .', ' . $inmueble->nombres);
-            $retorno .= '<optgroup id="inmuebles-optgroup-0" label="' . $i . '">';
-            $retorno .= '<option value="' . $inmueble->id . '">';
-            $retorno .= $inmueble->apellidos . ', ' . $inmueble->nombres . '</option>';
-            $retorno .= ' </optgroup>';
-            $i++;
-        }
-        print_r($retorno);
-        return $retorno;
-    }
-
-    private function _mostrarGrafico()
-    {
-        $retorno = '<img src="http://chart.apis.google.com/chart?cht=';
-        $retorno .= 'p3'; //tipo de grafico
-        $retorno .= '&chs=400x175'; //tamaño del grafico
-        $retorno .= '&chd=t:45,32,17'; //chd Especifica los datos de la gráfica. Por ejemplo t:45,32,17. El primer carácter t indica que los datos se representan en formato de texto básico, es decir, valores comprendidos entre 0 y 100 separados por comas.
-        $retorno .= '&chl=Diseño|Programación|Otras+cosas';  //chl Indica las etiquetas de cada elemento de la gráfica. Por ejemplo chl=Diseño|Programación|Otras+cosas.
-        $retorno .= '&chtt=Inmuebles+Inscriptos';  //chtt Establece el título de la gráfica. Por ejemplo: chtt=Posts+en+Theproc.es.
-        $retorno .= '&chco=ff0000'; //chco Establece el color de los elementos del gráfico. Por ejemplo: ff0000.
-//        En el caso de las gráficas de tipo tarta los distintos elementos se muestran con varias tonalidades de dicho color. También se puede especificar un color por elemento, como en el ejemplo de gráfica barras chco=FF9999|99FF99|9999FF.
-        $retorno .= '&chf=bg,s,ffffff" id="grafico" alt="grafico">'; //chf Establece el color de fondo de la gráfica. En los ejemplos anteriores he usado de fondo el mismo color que el fondo del blog para que se integre perfectamente bg,s,fff6f6, es decir, background color, solid, fff6f6.
-        return $retorno;
-    }
-
     private function _crearFiltro($pag)
     {
         $filtro = '';
@@ -650,142 +530,6 @@ class InmueblesControlador extends ControladorBase
             die('No se puede crear el filtro');
         }
         return 'Filtro' . ucfirst($class);
-    }
-
-    public function exportar($filtro = '')
-    {
-        require_once LIBRERIAS . 'ExportToExcel.php';
-        $exp = new ExportToExcel();
-        $filtro = $this->_crearFiltro($filtro);
-        if (isset($filtro)) {
-            if (!empty($_GET['pg'])) {
-                $pag = Input::get('pg');
-            } else {
-                $pag = 1;
-            }
-            $inicio = 0 + ($pag - 1) * 30;
-            if (!empty($_GET['sidx'])) {
-                $orden = Input::get('sidx');
-            } else {
-                $orden = 'salones.salon, salones.division, inmuebles.apellidos, inmuebles.nombres';
-            }
-        }
-        if (Input::get('lista') == 'inscriptos') {
-            $ciclo = date('Y');
-            $salon = 0;
-            $exp->setTitulo('LISTADO DE ALUMNOS INSCRIPTOS');
-            $tituloCampos = array(
-                'id' => 'Id',
-                'apellidos' => 'Apellidos',
-                'nombres' => 'Nombres',
-                'salon' => 'Salón',
-                'division' => 'Div.'
-            );
-            foreach ($tituloCampos as $key => $value) {
-                $encCol[] = $value;
-            }
-            $encBD = array(
-                'id',
-                'apellidos',
-                'nombres',
-                'salon',
-                'division'
-            );
-            $exp->setFormatoCol(array(
-                'id' => 'entero'
-            ));
-            $datos = $this->_modelo->listaInmueblesInscriptos(0, 0, $ciclo, $orden, $salon, $filtro);
-        } else {
-            $exp->setTitulo('LISTADO DE ALUMNOS');
-            foreach ($this->_tituloCampos as $key => $value) {
-                $encCol[] = $value;
-            }
-            $encBD = $this->_campos;
-            $exp->setFormatoCol(array(
-                'id' => 'entero',
-                'nro_doc' => 'entero',
-                'fechaNac' => 'fecha'
-            ));
-            $inicio = 0;
-            $datos = $this->_modelo->listadoInmuebles($inicio, $orden, $filtro, $this->_campos);
-        }
-        $encCol = implode(',', $encCol);
-        $exp->setEncabezadoPagina('&L&G&C&HPequeno Hogar 0476');
-        $exp->setPiePagina('&RPag &P de &N');
-        $exp->setEncBD($encBD);
-
-        $exp->setEncabezados($encCol);
-        $exp->setIfTotales(FALSE);
-
-        $exp->exportar($datos);
-
-        echo 'exportar';
-    }
-
-    /**
-     * Metodo para editar los datos de un inmueble
-     * @param Array $arg 
-     * @access public
-     */
-    public function editarInscripcion($arg)
-    {
-        require_once DIRMODULOS . 'Inmuebles/Forms/EditarInscripcion.php';
-        require_once LIBRERIAS . 'BarraHerramientas.php';
-        /* traigo los siguientes campos de la lista de salones */
-        $campos = array('salones.id, salones.salon');
-        /* obtengo los datos de la bd */
-        $this->_varForm['listaSalones'] = $this->_modeloSalones->listadoSalones(0, 'salon', '', $campos);
-        /* Busco los datos de la inscripcion */
-        $inscripcionBuscada = $this->_modelo->buscarInscripto($arg);
-        if (is_object($inscripcionBuscada)) {
-            $this->_varForm['id'] = $inscripcionBuscada->id;
-            /* Si encontró la inscripcion busco los datos del inmueble */
-            $inmuebleBuscado = $this->_modelo->buscarAlumno(array('id=' . $inscripcionBuscada->idAlumno));
-            if (is_object($inmuebleBuscado)) {
-                $this->_varForm['idAlumno'] = $inmuebleBuscado->id;
-                $this->_varForm['apellidos'] = $inmuebleBuscado->apellidos;
-                $this->_varForm['nombres'] = $inmuebleBuscado->nombres;
-            } else {
-                die('No se encontró al inmueble');
-            }
-            /* Si encontró la inscripcion busco los datos del salón */
-            $salonBuscado = $this->_modeloSalones->buscarSalon(array('id=' . $inscripcionBuscada->idSalon));
-            if (is_object($salonBuscado)) {
-                $this->_varForm['idSalon'] = $inscripcionBuscada->idSalon;
-                $this->_varForm['salon'] = $salonBuscado->salon;
-            } else {
-                die('No se encontró los datos del salón');
-            }
-            $this->_varForm['aLectivo'] = $inscripcionBuscada->aLectivo;
-        } else {
-            die('No se encontraron los datos de Inscripción');
-        }
-        $this->_form = new Form_EditarInscripcion($this->_varForm);
-        $this->_vista->form = $this->_form->mostrar();
-        if ($_POST) {
-            if ($this->_form->isValid($_POST)) {
-                $values = $this->_form->getValidValues($_POST);
-                $valores['id'] = $values['id'];
-                $valores['idSalon'] = $values['idSalon'];
-                $valores['idAlumno'] = $values['idAlumno'];
-                $valores['aLectivo'] = $values['aLectivo'];
-                $condicion = implode(',', $arg);
-                $this->_modelo->actualizarInscripcion($valores, $condicion);
-                $this->_vista->mensajes = Mensajes::presentarMensaje(DATOSGUARDADOS, 'info');
-            }
-        }
-        $bh = new BarraHerramientas($this->_vista);
-        $bh->addBoton('Guardar', $this->_paramBotonGuardarAlumno);
-        $bh->addBoton('Nuevo', $this->_paramBotonNuevaInscripcion);
-        $bh->addBoton('Eliminar', array('href' => 'index.php?option=inmuebles&sub=eliminarInscripcion&id=' . $this->_varForm['id']
-        ));
-        $bh->addBoton('Lista', $this->_paramBotonListaInscriptos);
-        $bh->addBoton('Volver', $this->_paramBotonVolver);
-
-        $this->_vista->barraherramientas = $bh->render();
-        $this->_layout->content = $this->_vista->render('AgregarInmueblesVista.php');
-        // render final layout
-        echo $this->_layout->render();
     }
 
 }
